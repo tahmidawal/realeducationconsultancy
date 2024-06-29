@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # Load the course data
 @st.cache_data
 def load_data():
-    df = pd.read_csv('Shuffled_Course_Details_UK_Ireland.csv')
+    df = pd.read_csv('Combined_Course_Details_UK_Ireland.csv')
     return df
 
 df = load_data()
@@ -14,7 +15,7 @@ if 'loaded_count' not in st.session_state:
     st.session_state.loaded_count = 25
 
 # Title and description
-st.title('🎓 Course Finder App')
+st.title('🎓 Real Education Consultancy')
 st.markdown("""
     Welcome to the Course Finder App! Use the filters in the sidebar to find courses 
     that match your preferences from various providers across the UK and Ireland.
@@ -24,12 +25,39 @@ st.markdown("""
 st.sidebar.header('Filter Courses')
 st.sidebar.markdown('Use the filters below to narrow down your search.')
 
-majors = st.sidebar.multiselect(
-    'Select Majors', 
-    options=df['Subjects'].unique(), 
-    default=None, 
-    help='Choose one or more subjects of interest.'
-)
+# Function to find similar majors
+def find_similar_majors(input_major, all_majors, top_n=5):
+    all_majors = list(all_majors)
+    all_majors.append(input_major)
+    distances = [levenshtein_distance(input_major, major) for major in all_majors]
+    sorted_indices = np.argsort(distances)
+    similar_majors = [all_majors[i] for i in sorted_indices[:top_n]]
+    return similar_majors
+
+# Levenshtein distance function
+def levenshtein_distance(a, b):
+    """Calculates the Levenshtein distance between a and b."""
+    n, m = len(a), len(b)
+    if n > m:
+        a, b = b, a
+        n, m = m, n
+
+    current_row = range(n + 1)
+    for i in range(1, m + 1):
+        previous_row, current_row = current_row, [i] + [0] * n
+        for j in range(1, n + 1):
+            add, delete, change = previous_row[j] + 1, current_row[j - 1] + 1, previous_row[j - 1]
+            if a[j - 1] != b[i - 1]:
+                change += 1
+            current_row[j] = min(add, delete, change)
+
+    return current_row[n]
+
+input_major = st.sidebar.text_input('Enter a Major', help='Type in a major to see related courses.')
+
+majors = df['Subjects'].unique()
+
+# Sidebar filters
 providers = st.sidebar.multiselect(
     'Select Providers', 
     options=df['Provider'].unique(), 
@@ -52,8 +80,9 @@ academic_year = st.sidebar.multiselect(
 # Apply filters
 filtered_df = df
 
-if majors:
-    filtered_df = filtered_df[filtered_df['Subjects'].isin(majors)]
+if input_major:
+    similar_majors = find_similar_majors(input_major, df['Subjects'].unique())
+    filtered_df = filtered_df[filtered_df['Subjects'].isin(similar_majors)]
 
 if providers:
     filtered_df = filtered_df[filtered_df['Provider'].isin(providers)]
